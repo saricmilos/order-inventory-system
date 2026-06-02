@@ -29,24 +29,51 @@ Two independent services communicate exclusively through Kafka. Neither service 
 |---|---|---|
 | `order-service` | FastAPI + uvicorn | Exposes REST API, publishes order events |
 | `inventory-service` | Python consumer | Consumes events, manages in-memory stock |
-| `kafka` | bitnami/kafka 3.7 (KRaft) | Message broker, no Zookeeper |
+| `kafka` | apache/kafka (KRaft) | Message broker, no Zookeeper |
 | `kafka-init` | one-shot container | Creates topics before services start |
 
 ## Running Locally
 
-**Prerequisites:** Docker and Docker Compose (or Docker Desktop).
+**Prerequisites:** Docker Desktop (includes Docker and Docker Compose).
+
+**1. Start everything:**
 
 ```bash
 docker compose up --build
 ```
 
-All services start in the correct order via `depends_on` health checks. The system is ready when you see `consumer_started` in the inventory-service logs.
+This starts Kafka, creates the topics, and boots both services automatically in the right order. Wait until you see this line in the logs:
 
-To run detached:
+```
+inventory-service-1  | {"message": "consumer_started", ...}
+```
+
+That means the system is ready.
+
+**2. Send an order:**
+
+Open **http://localhost:8000/docs** in your browser. This is the interactive API UI — no extra tools needed.
+
+- Click `POST /orders` → `Try it out` → `Execute`
+- You'll get back a `202` response with an `order_id`
+
+**3. See what happened:**
 
 ```bash
-docker compose up --build -d
-docker compose logs -f
+docker compose logs inventory-service
+```
+
+You'll see the order was received and processed:
+
+```json
+{"message": "message_received", "order_id": "...", "product_id": "PROD-001", ...}
+{"message": "order_processed", "product_id": "PROD-001", "remaining_stock": 95, ...}
+```
+
+**4. Stop:**
+
+```bash
+docker compose down
 ```
 
 ## API
@@ -55,10 +82,15 @@ docker compose logs -f
 
 Place an order. Returns HTTP 202 immediately after publishing to Kafka.
 
-```bash
-curl -X POST http://localhost:8000/orders \
-  -H "Content-Type: application/json" \
-  -d '{"product_id": "PROD-001", "quantity": 5, "customer_id": "CUST-123"}'
+**Easiest:** Use the docs UI at **http://localhost:8000/docs**
+
+Or with PowerShell:
+
+```powershell
+Invoke-RestMethod -Uri http://localhost:8000/orders `
+  -Method POST `
+  -ContentType "application/json" `
+  -Body '{"product_id": "PROD-001", "quantity": 5, "customer_id": "CUST-123"}'
 ```
 
 Response:
@@ -68,9 +100,7 @@ Response:
 
 ### GET /health
 
-```bash
-curl http://localhost:8000/health
-```
+Open **http://localhost:8000/health** in your browser.
 
 Response:
 ```json
